@@ -13,3 +13,11 @@ Hurray solution if we infer each document as a vector of vectors.
 Example: we have 3 features [f1,f2,f3] and 2 documents [d1, d2].
 for d1: (1,0) -> f1 | (2,2.0) -> f2 | (3,5.0) -> f3 : Then this is termed as dense vector.
 Commonly referred as (0,2.0,5.0) aka vector with 3 dimensions.
+
+for d2 [0.1, 1.9, 4.9] is ~ to d1, however this conclusion is entirely dependent on how correctly we choose our features.
+
+BOW approach just records the count of tokens in a document and completely ignores the ordering.
+excample corpus -> ['coffee', 'milk', 'sugar', 'spoon'] and d1 -> 'coffee milk milk' then vector -> [1,2,0,0]
+
+
+ 
