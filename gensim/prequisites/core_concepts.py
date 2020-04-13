@@ -36,3 +36,37 @@ from gensim import corpora
 
 dictionary = corpora.Dictionary(processed_corpus)
 print(dictionary)
+
+# Show unique id for each token
+pprint.pprint(dictionary.token2id)
+# Convert original corpus to a list of vectors
+bow_corpus = [dictionary.doc2bow(text) for text in processed_corpus]
+pprint.pprint(bow_corpus)
+
+from gensim import models
+
+# train the model
+tfidf = models.TfidfModel(bow_corpus)
+
+# transform the "system minors" string
+words = "system minors".lower().split()
+print(tfidf[dictionary.doc2bow(words)])
+
+# Custome query
+from gensim import similarities
+
+index = similarities.SparseMatrixSimilarity(tfidf[bow_corpus], num_features=12) # count of all documents in the corpus
+query_document = 'system engineering'.split()
+query_bow = dictionary.doc2bow(query_document)
+sims = index[tfidf[query_bow]]
+print(list(enumerate(sims)))
+
+for document_number, score in sorted(enumerate(sims), key=lambda x: x[1], reverse=True):
+    print(document_number, score)
+
+import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
+img = mpimg.imread('run_core_concepts.png')
+imgplot = plt.imshow(img)
+plt.axis('off')
+plt.show()
