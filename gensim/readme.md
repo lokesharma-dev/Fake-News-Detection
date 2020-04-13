@@ -45,3 +45,10 @@ Further pre-requisites: https://radimrehurek.com/gensim/auto_examples/index.html
  
  Limitation:
  1. Unable to infer vectors for unfamiliar words.(overcome this by FastText Model)
+ 
+  ######################################################################################
+  Doc2Vec: In gensim paragraph vector model is represented as Doc2Vec.
+  There are 2 implementations:
+  1. PV-DM : Distributed Memory Paragraph Vector (analogous to wv CBoW)
+  2. PV-DBOW  : Distributed Bag of Words PV (analogous to wv SG)
+  
