@@ -1,39 +1,65 @@
 import re
-import nltk
-nltk.download('stopwords')
-from nltk.corpus import stopwords
-from tensorflow.keras import regularizers, initializers, optimizers, callbacks
-from tensorflow.keras.preprocessing.sequence import pad_sequences
-from tensorflow.keras.preprocessing.text import Tokenizer
-from keras.utils.np_utils import to_categorical
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Input, Embedding
+import time
 import pandas as pd
 import numpy as np
+from nltk.corpus import stopwords
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Input, Embedding, LSTM, Dropout, Dense
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+from tensorflow.keras.preprocessing.text import Tokenizer
 
-df = pd.read_csv('data/practise/fake_or_real_news.csv')
-df.head()
-df.info()
+# Basic Example
 
-# Extract relevant features.
-x = df['title'] + " " + df['text']
-y = pd.get_dummies(df['label'])
-y = np.array(y)
+x = ['sun rises from east',
+        'sun sets in west',
+        'sun sets in north',
+        'sun rises in south'
+        'earth revolves around sun',
+        'solar system has nine planets',
+        'sun is longer in summers',
+        'earth has long summers',
+        'winters have less sun',
+        'sun and sunlight mean the same',
+     'sun sets in east']
+labels = [1,1,0,0,1,1,1,1,1,0]
+labels = np.array(labels)
 
-# Parameters
-MAX_NB_WORDS = 100000 # max number of words for tokenizer
-MAX_SEQUENCE_LENGTH = 1000 # max length of each sentences, including padding
-VALIDATION_SPLIT = 0.2 # 20% data for validation
-EMBEDDING_DIM = 100 # dimensions
-GLOVE_DIR = 'models/glove.6B/glove.6B.' + str(EMBEDDING_DIM) + 'd.txt'
+docs = [clean_text(row) for row in x]
 
-# Data Cleaning
+MAX_VOCAB_SIZE = 100
+EMBEDDING_DIM = 20
+MAX_DOC_LENGTH = 10
 
+# Tokenize & pad sequences
+tokenizer = Tokenizer(num_words=MAX_VOCAB_SIZE)
+tokenizer.fit_on_texts(docs)
+encoded_docs = tokenizer.texts_to_sequences(docs)
+word_index = tokenizer.word_index
+print('Vocabulary size :', len(word_index))
+sequences = pad_sequences(encoded_docs, padding='post', maxlen=MAX_DOC_LENGTH)
+print('Shape of data tensor:', sequences.shape)
+print('Shape of label tensor', labels.shape)
+
+# Word Embeddings : the dimension are chosen in a experimental way have abstract meanings. They have nothing to do with corpus size.
+# larger dimension will capture more information but harder to use.
+
+model = Sequential()
+model.add(Embedding(len(word_index)+1, EMBEDDING_DIM, input_length=MAX_DOC_LENGTH))
+model.add(LSTM(units=64))
+model.add(Dense(1, activation='sigmoid'))
+model.summary()
+
+# Train the model
+model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy']) # only compilation
+history = model.fit(sequences[:-1], labels[:-1], epochs=10, batch_size=10, validation_split=0.2)
+
+
+model.predict([1,2,4,0,0,0,0,0,0,0])
+
+
+# Clean the texts
 def clean_text(text, remove_stopwords=True):
-    flag = 0
     output = ""
-    stopword = ""
-
     text = str(text).replace(r'http[\w:/\.]+', '') # removing urls
     text = str(text).replace(r'[^\.\w\s]', '') # removing everything but characters and punctuation
     text = str(text).replace(r'\.\.+', '.') # replace multiple periods with a single one
@@ -44,118 +70,71 @@ def clean_text(text, remove_stopwords=True):
     if remove_stopwords:
         text = text.split(" ")
         for word in text:
-            if '\n' in word: # Manual intervention
-                word = word.replace('\n', '')
             if word not in stopwords.words('english'):
                 output = output + " " + word
-            else:
-                stopword = stopword + " " + word
     return output
 
-texts = []
-for row in x:
-    texts.append(clean_text(row))
 
-# Tokenize your data
-tokenizer = Tokenizer(num_words=MAX_NB_WORDS)
-tokenizer.fit_on_texts(texts)
-sequences = tokenizer.texts_to_sequences(texts)
-word_index = tokenizer.word_index
-print('Vocabulary size:', len(word_index))
 
-# Add padding to make it uniform
-data = pad_sequences(sequences, padding='post', maxlen=MAX_SEQUENCE_LENGTH)
-print('Shape of data tensor:', data.shape)
-print('Shape of label tensor:', y.shape)
 
-# Shuffle your data randomly
-indices = np.arange(data.shape[0])
-np.random.shuffle(indices)
-data = data[indices]
-labels = y[indices]
 
-# Split into validation set
-num_validation_samples = int(VALIDATION_SPLIT*data.shape[0])
-x_train = data[:-num_validation_samples]
-y_train = labels[:-num_validation_samples]
-x_val = data[-num_validation_samples:]
-y_val = labels[-num_validation_samples:]
-print('Number of entries in each category:')
-print('Training: ', y_train.sum(axis=0))
-print('Validation: ',y_val.sum(axis=0))
 
-# Word Embeddings : the dimension are chosen in a experimental way have abstract meanings. They have nothing to do with corpus size.
-# larger dimension will capture more information but harder to use.
 
-embeddings_index = {}
-f = open(GLOVE_DIR, encoding='utf-8')
-print('Loading Glove from: ', GLOVE_DIR, '...', end='')
-for line in f:
-    values = line.split()
-    word = values[0]
-    embeddings_index[word] = np.asarray(values[1:], dtype='float32')
-f.close()
-print('\nDone.\n Procedding with Embedded Matrix...', end='')
 
-embeddings_matrix = np.random.random(((len(word_index)+1),EMBEDDING_DIM))
-for word, i in word_index.items():
-    embedding_vector = embeddings_index.get(word)
-    if embedding_vector is not None:
-        embeddings_matrix[i] = embedding_vector
-print('\nCompleted')
 
-# LSTM Model initialization
-model = Sequential()
-model.add(Input(shape=(MAX_SEQUENCE_LENGTH,), dtype='int32'))
-model.add(Embedding(len(word_index)+1, EMBEDDING_DIM,
-                    weights = [embeddings_matrix],
-                    input_length = MAX_SEQUENCE_LENGTH,
-                    trainable = False,
-                    name = 'embeddings'))
-model.add(LSTM(60, return_sequences=True, name='lstm_layer'))
-model.add(GlobalMaxPool1D())
-model.add(Dropout(0.1))
-model.add(Dense(50, activation='relu'))
-model.add(Dropout(0.1))
-model.add(Dense(2, activation='sigmoid'))
 
-# Train the model
-model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy']) # only compilation
-history = model.fit(x_train, y_train, epochs=10, batch_size=128,
-                    validation_data=(x_val, y_val))
 
-# Model Evaluation
-import matplotlib.pyplot as plt
-loss = history.history[‘loss’]
-val_loss = history.history[‘val_loss’]
-epochs = range(1, len(loss)+1)
-plt.plot(epochs, loss, label=’Training loss’)
-plt.plot(epochs, val_loss, label=’Validation loss’)
-plt.title(‘Training and validation loss’)
-plt.xlabel(‘Epochs’)
-plt.ylabel(‘Loss’)
-plt.legend()
-plt.show()
-
-accuracy = history.history[‘acc’]
-val_accuracy = history.history[‘val_acc’]
-plt.plot(epochs, accuracy, label=’Training accuracy’)
-plt.plot(epochs, val_accuracy, label=’Validation accuracy’)
-plt.title(‘Training and validation accuracy’)
-plt.ylabel(‘Accuracy’)
-plt.xlabel(‘Epochs’)
-plt.legend()
-plt.show()
-
-random_num = np.random.randint(0, 100)
-test_data = x[random_num]
-test_label = y[random_num]
-clean_test_data = clean_text(test_data)
-test_tokenizer = Tokenizer(num_words=MAX_NB_WORDS)
-test_tokenizer.fit_on_texts(clean_test_data)
-test_sequences = tokenizer.texts_to_sequences(clean_test_data)
-word_index = test_tokenizer.word_index
-test_data_padded = pad_sequences(test_sequences, padding = ‘post’, maxlen = MAX_SEQUENCE_LENGTH)
-
-prediction = model.predict(test_data_padded)
-prediction[random_num].argsort()[-len(prediction[random_num]):]
+# '''
+# Sequence classification :
+# is a predictive algorithm where you have a sequence of inputs over space or time
+# abd the goal is to categorize the sequence.
+#
+# '''
+#
+# # LSTM with Dropout for sequence classification in the IMDB dataset
+# import numpy
+# from keras.datasets import imdb
+# from keras.models import Sequential
+# from keras.layers import Dense
+# from keras.layers import LSTM
+# from keras.layers import Dropout
+# from keras.layers.embeddings import Embedding
+# from keras.preprocessing import sequence
+# # fix random seed for reproducibility
+# numpy.random.seed(7)
+# # load the dataset but only keep the top n words, zero the rest
+# top_words = 5000
+# (X_train, y_train), (X_test, y_test) = imdb.load_data(num_words=top_words)
+# # truncate and pad input sequences
+# max_review_length = 500
+# X_train = sequence.pad_sequences(X_train, maxlen=max_review_length)
+# X_test = sequence.pad_sequences(X_test, maxlen=max_review_length)
+# # create the model
+# embedding_vecor_length = 32
+# model = Sequential()
+# model.add(Embedding(top_words, embedding_vecor_length, input_length=max_review_length))
+# model.add(Dropout(0.2))
+# model.add(LSTM(100))
+# model.add(Dropout(0.2))
+# model.add(Dense(1, activation='sigmoid'))
+# model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+# print(model.summary())
+# model.fit(X_train, y_train, epochs=1, batch_size=500)
+# # Final evaluation of the model
+# scores = model.evaluate(X_test, y_test, verbose=0)
+# print("Accuracy: %.2f%%" % (scores[1]*100))
+#
+#
+#
+# # create another model
+# embedding_vecor_length = 32
+# model = Sequential()
+# model.add(Embedding(top_words, embedding_vecor_length, input_length=max_review_length))
+# model.add(LSTM(100, dropout=0.2, recurrent_dropout=0.2))
+# model.add(Dense(1, activation='sigmoid'))
+# model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+# print(model.summary())
+# model.fit(X_train, y_train, epochs=3, batch_size=64)
+# # Final evaluation of the model
+# scores = model.evaluate(X_test, y_test, verbose=0)
+# print("Accuracy: %.2f%%" % (scores[1]*100))
