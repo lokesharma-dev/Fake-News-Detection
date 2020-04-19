@@ -34,7 +34,7 @@ MAX_VOCAB_SIZE = 1000000 # maximum no of unique words
 MAX_DOC_LENGTH = 500 # maximum no of words in each sentence
 EMBEDDING_DIM = 50 # Embeddings dimension from Glove directory
 GLOVE_DIR = 'models/glove.6B/glove.6B.' + str(EMBEDDING_DIM) + 'd.txt'
-VALIDATION_SPLIT = 0.2
+TEST_SPLIT = 0.2
 
 # Tokenize & pad sequences
 tokenizer = Tokenizer(num_words=MAX_VOCAB_SIZE)
@@ -52,6 +52,16 @@ np.random.shuffle(indices)
 data = sequences[indices]
 labels = y[indices]
 
+# Split into validation set
+num_test_samples = int(TEST_SPLIT*data.shape[0])
+x_train = data[:-num_test_samples]
+y_train = labels[:-num_test_samples]
+x_test = data[-num_test_samples:]
+y_test = labels[-num_test_samples:]
+print('Number of entries in each category:')
+print('Training: ', y_train.sum(axis=0))
+print('Validation: ',y_test.sum(axis=0))
+
 # Word Embeddings : the dimension are chosen in a experimental way have abstract meanings. They have nothing to do with corpus size.
 # larger dimension will capture more information but harder to use.
 
@@ -63,13 +73,11 @@ model.summary()
 
 # Train the model
 model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy']) # only compilation
-history = model.fit(data, labels, epochs=10, batch_size=10,
-                    validation_split=0.2)
-
-
-
-
-
+history = model.fit(data, labels, epochs=10, batch_size=10, validation_split=0.2)
+#evaluating model
+score, acc = model.evaluate(x_test, y_test, batch_size=10)
+print('Test score:', score)
+print('Test accuracy:', acc)
 
 # Clean the texts
 def clean_text(text, remove_stopwords=True):
