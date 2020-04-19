@@ -3,6 +3,7 @@ import time
 import pandas as pd
 import numpy as np
 from nltk.corpus import stopwords
+import tensorflow as tf
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Input, Embedding, LSTM, Dropout, Dense
 from tensorflow.keras.preprocessing.sequence import pad_sequences
@@ -16,26 +17,13 @@ df.nunique()
 df.isna().sum()
 df['Subject'].fillna('',inplace=True) # Replace all missing values
 x = df['Subject'] + " " + df['Content']
+# y = tf.one_hot(df['Label'],1)
+# y = [0 if label == 'Fake' else 1 for label in df['Label']]
 y = pd.get_dummies(df['Label'])
 y = np.array(y) # Dummy Encoding
 
-# Clean the texts
-def clean_text(text, remove_stopwords=True):
-    output = ""
-    text = str(text).replace(r'http[\w:/\.]+', '') # removing urls
-    text = str(text).replace(r'[^\.\w\s]', '') # removing everything but characters and punctuation
-    text = str(text).replace(r'\.\.+', '.') # replace multiple periods with a single one
-    text = str(text).replace(r'\.', ' . ') # replace periods with a single one
-    text = str(text).replace(r'\s\s++', ' ') # replace multiple whitespace with one
-    text = str(text).replace(r'\n', '') # removing line break
-    text = re.sub(r'[^\w\s]', '', text.lower()) # lower texts
-    if remove_stopwords:
-        text = text.split(" ")
-        for word in text:
-            if word not in stopwords.words('english'):
-                output = output + " " + word
-    return output
 
+# Clean the corpus
 start = time.time()
 docs = [clean_text(row) for row in x]
 end = time.time()
@@ -63,30 +51,42 @@ indices = np.arange(sequences.shape[0])
 np.random.shuffle(indices)
 data = sequences[indices]
 labels = y[indices]
-num_validation_samples = int(VALIDATION_SPLIT*data.shape[0])
-x_train = data[:-num_validation_samples]
-y_train = labels[:-num_validation_samples]
-x_val = data[-num_validation_samples:]
-y_val = labels[-num_validation_samples:]
-print('Number of entries for each category in both datasets:')
-print('Training: ', y_train.sum(axis=0))
-print('Validation: ', y_val.sum(axis=0))
-
 
 # Word Embeddings : the dimension are chosen in a experimental way have abstract meanings. They have nothing to do with corpus size.
 # larger dimension will capture more information but harder to use.
 
 model = Sequential()
-model.add(Embedding(len(word_index), EMBEDDING_DIM, input_length=MAX_DOC_LENGTH))
-model.add(LSTM(units=MAX_DOC_LENGTH))
-
+model.add(Embedding(len(word_index)+1, EMBEDDING_DIM, input_length=MAX_DOC_LENGTH))
+model.add(LSTM(units=64))
 model.add(Dense(2, activation='sigmoid'))
 model.summary()
 
 # Train the model
 model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy']) # only compilation
-history = model.fit(x_train, y_train, epochs=10, batch_size=128,
-                    validation_data=(x_val, y_val))
+history = model.fit(data, labels, epochs=10, batch_size=10,
+                    validation_split=0.2)
+
+
+
+
+
+
+# Clean the texts
+def clean_text(text, remove_stopwords=True):
+    output = ""
+    text = str(text).replace(r'http[\w:/\.]+', '') # removing urls
+    text = str(text).replace(r'[^\.\w\s]', '') # removing everything but characters and punctuation
+    text = str(text).replace(r'\.\.+', '.') # replace multiple periods with a single one
+    text = str(text).replace(r'\.', ' . ') # replace periods with a single one
+    text = str(text).replace(r'\s\s++', ' ') # replace multiple whitespace with one
+    text = str(text).replace(r'\n', '') # removing line break
+    text = re.sub(r'[^\w\s]', '', text.lower()) # lower texts
+    if remove_stopwords:
+        text = text.split(" ")
+        for word in text:
+            if word not in stopwords.words('english'):
+                output = output + " " + word
+    return output
 
 
 
